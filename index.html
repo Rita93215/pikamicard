@@ -1,0 +1,576 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>好友明信片互動計數</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@400;600;700&family=Noto+Sans+TC:wght@300;400;500&display=swap');
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --sky: #D4E8F0;
+      --ink: #2B3A4A;
+      --stamp-red: #C0392B;
+      --postmark: #7A8B99;
+      --paper: #FBF7EE;
+      --accent-teal: #4A8FA0;
+      --accent-warm: #E8A87C;
+      --line: #C9BFA5;
+    }
+
+    body {
+      min-height: 100vh;
+      background: var(--sky);
+      background-image:
+        radial-gradient(circle at 20% 50%, rgba(255,255,255,0.3) 0%, transparent 50%),
+        radial-gradient(circle at 80% 20%, rgba(200,230,240,0.5) 0%, transparent 40%);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      font-family: 'Noto Sans TC', sans-serif;
+      padding: 24px 16px 48px;
+      gap: 16px;
+    }
+
+    h1 {
+      font-family: 'Noto Serif TC', serif;
+      font-size: 1.05rem;
+      color: var(--postmark);
+      letter-spacing: 0.12em;
+      font-weight: 600;
+    }
+
+    /* hint bar */
+    .hint {
+      font-size: 0.72rem;
+      color: var(--postmark);
+      background: rgba(255,255,255,0.5);
+      border-radius: 50px;
+      padding: 5px 16px;
+      letter-spacing: 0.04em;
+    }
+
+    /* ── Friends grid ── */
+    .friends-grid {
+      width: 100%;
+      max-width: 560px;
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 8px;
+    }
+
+    .friend-card {
+      background: white;
+      border-radius: 10px;
+      padding: 14px 8px 10px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 4px;
+      box-shadow: 0 2px 8px rgba(43,58,74,0.08);
+      cursor: pointer;
+      border: 2px solid transparent;
+      transition: transform 0.12s, box-shadow 0.12s, border-color 0.12s;
+      user-select: none;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .friend-card:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 6px 16px rgba(43,58,74,0.14);
+      border-color: var(--accent-teal);
+    }
+
+    .friend-card:active { transform: scale(0.94); }
+
+    .friend-name {
+      font-size: 0.7rem;
+      font-weight: 500;
+      color: var(--ink);
+      text-align: center;
+      word-break: break-word;
+      line-height: 1.35;
+    }
+
+    .friend-count {
+      font-family: 'Noto Serif TC', serif;
+      font-size: 1.6rem;
+      font-weight: 700;
+      color: var(--accent-teal);
+      line-height: 1;
+      margin-top: 2px;
+    }
+
+    .friend-count-label {
+      font-size: 0.55rem;
+      color: var(--postmark);
+      letter-spacing: 0.04em;
+    }
+
+    /* edit icon on long-press / hover */
+    .edit-icon {
+      position: absolute;
+      top: 5px;
+      right: 6px;
+      font-size: 0.65rem;
+      color: var(--line);
+      opacity: 0;
+      transition: opacity 0.2s;
+      pointer-events: none;
+    }
+
+    .friend-card:hover .edit-icon { opacity: 1; }
+
+    /* Ripple */
+    .ripple {
+      position: absolute;
+      border-radius: 50%;
+      background: rgba(74,143,160,0.2);
+      transform: scale(0);
+      animation: ripple-anim 0.45s ease-out forwards;
+      pointer-events: none;
+    }
+
+    @keyframes ripple-anim {
+      to { transform: scale(6); opacity: 0; }
+    }
+
+    /* Add button */
+    .add-btn {
+      width: 100%;
+      max-width: 560px;
+      background: white;
+      color: var(--accent-teal);
+      border: 2px dashed var(--accent-teal);
+      border-radius: 10px;
+      padding: 12px;
+      font-family: 'Noto Sans TC', sans-serif;
+      font-size: 0.88rem;
+      font-weight: 500;
+      letter-spacing: 0.06em;
+      cursor: pointer;
+      transition: background 0.15s, transform 0.12s;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+    }
+
+    .add-btn:hover { background: #EEF7FA; transform: translateY(-1px); }
+    .add-btn:active { transform: scale(0.98); }
+
+    /* ── Modal ── */
+    .modal-backdrop {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(43,58,74,0.4);
+      z-index: 100;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+
+    .modal-backdrop.open { display: flex; }
+
+    .modal {
+      background: var(--paper);
+      border-radius: 14px;
+      padding: 26px 22px 20px;
+      width: 100%;
+      max-width: 320px;
+      box-shadow: 0 12px 40px rgba(43,58,74,0.25);
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+
+    .modal h2 {
+      font-family: 'Noto Serif TC', serif;
+      font-size: 1rem;
+      color: var(--ink);
+      font-weight: 700;
+    }
+
+    .modal input {
+      width: 100%;
+      padding: 10px 14px;
+      border: 1.5px solid var(--line);
+      border-radius: 8px;
+      font-family: 'Noto Sans TC', sans-serif;
+      font-size: 0.9rem;
+      color: var(--ink);
+      background: white;
+      outline: none;
+      transition: border-color 0.15s;
+    }
+
+    .modal input:focus { border-color: var(--accent-teal); }
+
+    .modal-btns {
+      display: flex;
+      gap: 8px;
+    }
+
+    .modal-delete {
+      background: none;
+      border: 1.5px solid #E0C0BB;
+      border-radius: 50px;
+      padding: 8px 14px;
+      font-family: 'Noto Sans TC', sans-serif;
+      font-size: 0.78rem;
+      color: var(--stamp-red);
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+
+    .modal-delete:hover { background: #FDF0EE; }
+
+    .modal-cancel {
+      background: none;
+      border: 1.5px solid var(--line);
+      border-radius: 50px;
+      padding: 8px 14px;
+      font-family: 'Noto Sans TC', sans-serif;
+      font-size: 0.78rem;
+      color: var(--postmark);
+      cursor: pointer;
+      transition: border-color 0.15s;
+      margin-left: auto;
+    }
+
+    .modal-cancel:hover { border-color: var(--postmark); }
+
+    .modal-confirm {
+      background: var(--accent-teal);
+      border: none;
+      border-radius: 50px;
+      padding: 8px 18px;
+      font-family: 'Noto Sans TC', sans-serif;
+      font-size: 0.78rem;
+      color: white;
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+
+    .modal-confirm:hover { background: #357A8A; }
+
+    /* count adjuster */
+    .count-adjuster {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 12px;
+      background: white;
+      border-radius: 10px;
+      padding: 10px 14px;
+      border: 1.5px solid var(--line);
+    }
+
+    .adj-btn {
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      border: none;
+      font-size: 1.1rem;
+      font-weight: 700;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: transform 0.1s, background 0.15s;
+      line-height: 1;
+    }
+
+    .adj-btn.minus {
+      background: #FDF0EE;
+      color: var(--stamp-red);
+    }
+
+    .adj-btn.minus:hover { background: #FAE0DD; }
+    .adj-btn.minus:active { transform: scale(0.9); }
+
+    .adj-btn.plus {
+      background: #EEF7FA;
+      color: var(--accent-teal);
+    }
+
+    .adj-btn.plus:hover { background: #D8EFF5; }
+    .adj-btn.plus:active { transform: scale(0.9); }
+
+    .adj-count {
+      font-family: 'Noto Serif TC', serif;
+      font-size: 1.6rem;
+      font-weight: 700;
+      color: var(--accent-teal);
+      min-width: 40px;
+      text-align: center;
+      line-height: 1;
+    }
+
+    .adj-label {
+      font-size: 0.75rem;
+      color: var(--postmark);
+    }
+
+    /* Toast */
+    .toast {
+      position: fixed;
+      bottom: 28px;
+      left: 50%;
+      transform: translateX(-50%) translateY(80px);
+      background: var(--ink);
+      color: white;
+      padding: 10px 22px;
+      border-radius: 50px;
+      font-size: 0.8rem;
+      letter-spacing: 0.04em;
+      opacity: 0;
+      transition: transform 0.35s cubic-bezier(0.34,1.56,0.64,1), opacity 0.3s;
+      pointer-events: none;
+      white-space: nowrap;
+      z-index: 200;
+    }
+
+    .toast.show {
+      transform: translateX(-50%) translateY(0);
+      opacity: 1;
+    }
+
+    @media (max-width: 360px) {
+      .friends-grid { grid-template-columns: repeat(3, 1fr); gap: 6px; }
+      .friend-card { padding: 10px 6px 8px; }
+    }
+  </style>
+</head>
+<body>
+
+  <h1>好友明信片互動記錄</h1>
+  <p class="hint">點擊好友卡片 ＋1 ・長按可編輯／刪除</p>
+
+  <div class="friends-grid" id="friends-grid"></div>
+
+  <button class="add-btn" id="add-btn">＋ 新增好友</button>
+
+  <!-- Add modal -->
+  <div class="modal-backdrop" id="add-modal">
+    <div class="modal">
+      <h2>新增好友</h2>
+      <input type="text" id="add-input" placeholder="輸入好友名稱…" maxlength="20" />
+      <div class="modal-btns">
+        <button class="modal-cancel" id="add-cancel">取消</button>
+        <button class="modal-confirm" id="add-confirm">新增</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Edit modal -->
+  <div class="modal-backdrop" id="edit-modal">
+    <div class="modal">
+      <h2>編輯好友</h2>
+      <input type="text" id="edit-input" placeholder="好友名稱…" maxlength="20" />
+      <div class="count-adjuster">
+        <button class="adj-btn minus" id="adj-minus">－</button>
+        <span class="adj-count" id="adj-count">0</span>
+        <span class="adj-label">次</span>
+        <button class="adj-btn plus" id="adj-plus">＋</button>
+      </div>
+      <div class="modal-btns">
+        <button class="modal-delete" id="edit-delete">🗑 刪除</button>
+        <button class="modal-cancel" id="edit-cancel">取消</button>
+        <button class="modal-confirm" id="edit-confirm">儲存</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+<script>
+  const DEFAULT_FRIENDS = [
+    'Alice li','Shan','Ann','請支援輸贏','淇淇','恭喜發財',
+    'Kelly Chou','Mini醬','花格格','Royceee','長安','Bunny',
+    'Lai','Tsubasa','佩怡','場場原價前排票','Je','Fannie Chen'
+  ];
+
+  const STORAGE_KEY = 'postcard_v3';
+
+  function loadState() {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (raw) return JSON.parse(raw);
+    } catch {}
+    const friends = DEFAULT_FRIENDS.map((name, i) => ({ id: 'f' + i, name }));
+    const counts = {};
+    friends.forEach(f => { counts[f.id] = 0; });
+    return { friends, counts };
+  }
+
+  function saveState() {
+    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch {}
+  }
+
+  let state = loadState();
+  let editingId = null;
+
+  const grid = document.getElementById('friends-grid');
+
+  /* ── Render ── */
+  function renderFriends() {
+    grid.innerHTML = '';
+    state.friends.forEach(f => {
+      const card = document.createElement('div');
+      card.className = 'friend-card';
+      card.innerHTML = `
+        <span class="edit-icon">✏️</span>
+        <span class="friend-name">${f.name}</span>
+        <span class="friend-count">${state.counts[f.id] || 0}</span>
+        <span class="friend-count-label">次互動</span>
+      `;
+
+      // short tap → +1
+      let pressTimer = null;
+      let didLongPress = false;
+
+      card.addEventListener('pointerdown', () => {
+        didLongPress = false;
+        pressTimer = setTimeout(() => {
+          didLongPress = true;
+          openEdit(f.id);
+        }, 600);
+      });
+
+      card.addEventListener('pointerup', () => clearTimeout(pressTimer));
+      card.addEventListener('pointerleave', () => clearTimeout(pressTimer));
+
+      card.addEventListener('click', (e) => {
+        if (didLongPress) return;
+        addRipple(card, e);
+        state.counts[f.id] = (state.counts[f.id] || 0) + 1;
+        saveState();
+        renderFriends();
+        showToast(`${f.name} ＋1 🎉`);
+      });
+
+      grid.appendChild(card);
+    });
+  }
+
+  /* ── Ripple ── */
+  function addRipple(el, e) {
+    const rect = el.getBoundingClientRect();
+    const r = document.createElement('span');
+    r.className = 'ripple';
+    const size = Math.max(rect.width, rect.height);
+    const x = (e.clientX ?? rect.left + rect.width / 2) - rect.left - size / 2;
+    const y = (e.clientY ?? rect.top + rect.height / 2) - rect.top - size / 2;
+    r.style.cssText = `width:${size}px;height:${size}px;left:${x}px;top:${y}px`;
+    el.appendChild(r);
+    r.addEventListener('animationend', () => r.remove());
+  }
+
+  /* ── Toast ── */
+  function showToast(msg) {
+    const t = document.getElementById('toast');
+    t.textContent = msg;
+    t.classList.add('show');
+    clearTimeout(t._timer);
+    t._timer = setTimeout(() => t.classList.remove('show'), 2000);
+  }
+
+  /* ── Add modal ── */
+  const addModal = document.getElementById('add-modal');
+  const addInput = document.getElementById('add-input');
+
+  document.getElementById('add-btn').addEventListener('click', () => {
+    addInput.value = '';
+    addModal.classList.add('open');
+    setTimeout(() => addInput.focus(), 80);
+  });
+
+  document.getElementById('add-cancel').addEventListener('click', () => addModal.classList.remove('open'));
+  addModal.addEventListener('click', e => { if (e.target === addModal) addModal.classList.remove('open'); });
+
+  function confirmAdd() {
+    const name = addInput.value.trim();
+    if (!name) { addInput.focus(); return; }
+    const id = 'f' + Date.now();
+    state.friends.push({ id, name });
+    state.counts[id] = 0;
+    saveState();
+    renderFriends();
+    addModal.classList.remove('open');
+    showToast(`已新增：${name} ✅`);
+  }
+
+  document.getElementById('add-confirm').addEventListener('click', confirmAdd);
+  addInput.addEventListener('keydown', e => { if (e.key === 'Enter') confirmAdd(); });
+
+  /* ── Edit modal ── */
+  const editModal = document.getElementById('edit-modal');
+  const editInput = document.getElementById('edit-input');
+
+  let editingCount = 0;
+
+  function updateAdjDisplay() {
+    document.getElementById('adj-count').textContent = editingCount;
+  }
+
+  document.getElementById('adj-minus').addEventListener('click', () => {
+    if (editingCount > 0) { editingCount--; updateAdjDisplay(); }
+  });
+
+  document.getElementById('adj-plus').addEventListener('click', () => {
+    editingCount++;
+    updateAdjDisplay();
+  });
+
+  function openEdit(id) {
+    editingId = id;
+    const f = state.friends.find(x => x.id === id);
+    editInput.value = f.name;
+    editingCount = state.counts[f.id] || 0;
+    updateAdjDisplay();
+    editModal.classList.add('open');
+    setTimeout(() => { editInput.focus(); editInput.select(); }, 80);
+  }
+
+  document.getElementById('edit-cancel').addEventListener('click', () => editModal.classList.remove('open'));
+  editModal.addEventListener('click', e => { if (e.target === editModal) editModal.classList.remove('open'); });
+
+  function confirmEdit() {
+    const name = editInput.value.trim();
+    if (!name || !editingId) { editInput.focus(); return; }
+    const f = state.friends.find(x => x.id === editingId);
+    const oldName = f.name;
+    f.name = name;
+    state.counts[editingId] = editingCount;
+    saveState();
+    renderFriends();
+    editModal.classList.remove('open');
+    showToast(`已更新：${name} (${editingCount} 次) ✅`);
+  }
+
+  function confirmDelete() {
+    if (!editingId) return;
+    const f = state.friends.find(x => x.id === editingId);
+    if (!confirm(`確定要刪除「${f.name}」嗎？`)) return;
+    state.friends = state.friends.filter(x => x.id !== editingId);
+    delete state.counts[editingId];
+    saveState();
+    renderFriends();
+    editModal.classList.remove('open');
+    showToast(`已刪除：${f.name}`);
+  }
+
+  document.getElementById('edit-confirm').addEventListener('click', confirmEdit);
+  document.getElementById('edit-delete').addEventListener('click', confirmDelete);
+  editInput.addEventListener('keydown', e => { if (e.key === 'Enter') confirmEdit(); });
+
+  // init
+  renderFriends();
+</script>
+</body>
+</html>
